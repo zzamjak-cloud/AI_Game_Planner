@@ -1,0 +1,45 @@
+[package]
+name = "ai-game-planner"
+version = "1.0.0"
+description = "A Tauri App"
+authors = ["Loadcomplete"]
+license = "GPL-3.0-only"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "ai_game_planner_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-opener = "2"
+tauri-plugin-store = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-http = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-deep-link = "2"
+serde = { version = "1", features = ["derive"] }
+# preserve_order: 에이전트 설정 파일(~/.claude.json 등)을 고쳐 쓸 때 키 순서를 보존한다
+serde_json = { version = "1", features = ["preserve_order"] }
+toml_edit = "0.22"
+dirs = "6"
+# Node 가 없는 PC 용 MCP 실행 파일 다운로드 (gzip 해제·SHA-256 검증) → src/mcp_runtime.rs
+ureq = "2"
+flate2 = "1"
+sha2 = "0.10"
+url = "2"
+tokio = { version = "1", features = ["sync"] }
+
+[dev-dependencies]
+# mcp_runtime 테스트에서 릴리스 자산 서버를 흉내 낸다
+tiny_http = "0.12"

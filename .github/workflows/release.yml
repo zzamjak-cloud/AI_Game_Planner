@@ -1,0 +1,217 @@
+# AI Game Planner 릴리스 워크플로우
+# 버전 태그 푸시 시 macOS/Windows 빌드 및 GitHub Releases 업로드
+
+name: Release AI Game Planner
+
+on:
+  push:
+    tags:
+      - 'v*'  # v1.0.0 형식의 태그에 반응
+
+jobs:
+  # 릴리스를 먼저 생성하여 병렬 빌드의 race condition 방지
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+    steps:
+      - name: Create or reuse release for tag
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          REPO="${{ github.repository }}"
+          if ! gh release view "$TAG" --repo "$REPO" 2>/dev/null; then
+            gh release create "$TAG" \
+              --repo "$REPO" \
+              --title "AI Game Planner ${TAG}" \
+              --notes "$(printf '%s\n' \
+                '## AI Game Planner 업데이트' \
+                '' \
+                '새 버전이 출시되었습니다.' \
+                '' \
+                '### 설치 방법' \
+                '- **macOS**: `.dmg` 파일을 다운로드하여 Applications 폴더에 드래그' \
+                '- **Windows**: `.msi` 파일을 다운로드하여 실행' \
+                '' \
+                '_자동 생성된 릴리스입니다._')"
+          fi
+          RID=$(gh api "repos/${REPO}/releases/tags/${TAG}" --jq '.id')
+          echo "release_id=${RID}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: create-release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS (Apple Silicon + Intel Universal)
+          - platform: macos-latest
+            args: --target universal-apple-darwin
+          # Windows
+          - platform: windows-latest
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install dependencies (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Base64로 인코딩된 키를 디코딩하여 환경 변수로 설정
+      - name: Decode signing key (macOS/Linux)
+        if: matrix.platform != 'windows-latest'
+        run: |
+          echo "${{ secrets.GAMEPLANNER_SIGNING_KEY_BASE64 }}" | base64 --decode > /tmp/signing_key.txt
+          echo "TAURI_SIGNING_PRIVATE_KEY=$(cat /tmp/signing_key.txt)" >> $GITHUB_ENV
+
+      - name: Decode signing key (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $key = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${{ secrets.GAMEPLANNER_SIGNING_KEY_BASE64 }}"))
+          echo "TAURI_SIGNING_PRIVATE_KEY=$key" >> $env:GITHUB_ENV
+
+      # AI 에이전트 연동용 MCP 서버(gp-mcp, mcp/) → docs/mcp.md "배포 방식"
+      # - 앱에는 JS 번들(gp-mcp.mjs, 약 3MB)만 넣는다. 사용자 PC 의 Node 20.16+ 로 실행된다.
+      # - Node 가 없는 PC 용 단일 실행 파일(런타임 포함 100MB+)은 앱에 넣지 않고 릴리스 자산(.gz + .sha256)으로만 올린다.
+      #   앱이 설정 화면에서 v<앱 버전> 릴리스의 자산을 받아 해시·버전을 확인한 뒤 설치한다.
+      # 실패해도 앱 빌드는 막지 않는다(번들 누락 시 앱은 MCP 등록만 비활성화된다).
+      - name: Setup Bun (MCP server)
+        uses: oven-sh/setup-bun@v2
+        continue-on-error: true
+        with:
+          bun-version: 1.3.10
+
+      - name: Build MCP server script (bundled with app)
+        continue-on-error: true
+        shell: bash
+        run: node scripts/build-mcp.mjs && ls -lh src-tauri/binaries/
+
+      - name: Publish MCP standalone binary (macOS universal)
+        if: matrix.platform == 'macos-latest'
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # 임시 폴더에서 빌드·lipo·서명·검증을 모두 통과한 뒤에만 업로드한다
+          WORK="$RUNNER_TEMP/gp-mcp"
+          mkdir -p "$WORK"
+          node scripts/build-mcp.mjs --standalone --target bun-darwin-arm64 --out "$WORK/gp-mcp-arm64"
+          node scripts/build-mcp.mjs --standalone --target bun-darwin-x64 --out "$WORK/gp-mcp-x64"
+          lipo -create -output "$WORK/gp-mcp" "$WORK/gp-mcp-arm64" "$WORK/gp-mcp-x64"
+          # lipo 로 합친 뒤 ad-hoc 서명을 다시 입힌다 (사용자 PC 에서 앱 밖으로 내려받아 실행되므로 서명이 유효해야 한다)
+          codesign --force --sign - "$WORK/gp-mcp"
+          codesign -v "$WORK/gp-mcp"
+          lipo -info "$WORK/gp-mcp"
+          gzip -9 -c "$WORK/gp-mcp" > "$WORK/gp-mcp-macos-universal.gz"
+          (cd "$WORK" && shasum -a 256 gp-mcp-macos-universal.gz > gp-mcp-macos-universal.gz.sha256)
+          gh release upload "${{ github.ref_name }}" "$WORK/gp-mcp-macos-universal.gz" "$WORK/gp-mcp-macos-universal.gz.sha256" --repo "${{ github.repository }}" --clobber
+
+      - name: Publish MCP standalone binary (Windows x64)
+        if: matrix.platform == 'windows-latest'
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/gp-mcp"
+          mkdir -p "$WORK"
+          node scripts/build-mcp.mjs --standalone --out "$WORK/gp-mcp.exe"
+          "$WORK/gp-mcp.exe" --version
+          gzip -9 -c "$WORK/gp-mcp.exe" > "$WORK/gp-mcp-windows-x64.exe.gz"
+          (cd "$WORK" && sha256sum gp-mcp-windows-x64.exe.gz > gp-mcp-windows-x64.exe.gz.sha256)
+          gh release upload "${{ github.ref_name }}" "$WORK/gp-mcp-windows-x64.exe.gz" "$WORK/gp-mcp-windows-x64.exe.gz.sha256" --repo "${{ github.repository }}" --clobber
+
+      - name: Build and Release (macOS without Apple signing)
+        if: matrix.platform == 'macos-latest'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.GAMEPLANNER_SIGNING_KEY_PASSWORD }}
+          # Apple 코드 서명 비활성화 (인증서 없음)
+          APPLE_SIGNING_IDENTITY: "-"
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ github.ref_name }}
+          retryAttempts: 5
+          args: ${{ matrix.args }}
+
+      - name: Build and Release (Windows)
+        if: matrix.platform == 'windows-latest'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.GAMEPLANNER_SIGNING_KEY_PASSWORD }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ github.ref_name }}
+          retryAttempts: 5
+          args: ${{ matrix.args }}
+
+  # 롤링 릴리스 업데이트 (자동 업데이트용 고정 URL)
+  update-latest:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download latest.json from versioned release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 버전 릴리스에서 latest.json 다운로드
+          gh release download "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "latest.json" \
+            --dir ./artifacts
+
+      - name: Update rolling release (latest)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 기존 롤링 릴리스 삭제 (있으면)
+          gh release delete latest \
+            --repo "${{ github.repository }}" \
+            --yes || true
+
+          # 기존 태그 삭제 (있으면)
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/latest" || true
+
+          # 새 롤링 릴리스 생성
+          gh release create latest \
+            --repo "${{ github.repository }}" \
+            --title "AI Game Planner Latest (Auto-Update)" \
+            --notes "자동 업데이트용 릴리스입니다. 직접 다운로드하지 마세요. 최신 버전: ${{ github.ref_name }}" \
+            --prerelease \
+            ./artifacts/latest.json
