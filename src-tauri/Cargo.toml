@@ -2,7 +2,7 @@
 name = "ai-game-planner"
 version = "1.0.0"
 description = "A Tauri App"
-authors = ["Loadcomplete"]
+authors = ["zzamjak <zzamjak@gmail.com>"]
 license = "GPL-3.0-only"
 edition = "2021"
 

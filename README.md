@@ -134,7 +134,7 @@ npm run tauri build
 
 ## 라이선스
 
-Copyright (C) 2025 Loadcomplete.
+Copyright (C) 2025 zzamjak <zzamjak@gmail.com>.
 
 이 프로젝트는 GNU General Public License v3.0 only 조건으로 배포됩니다. 자세한 내용은 [LICENSE](./LICENSE)를 확인하세요.
 

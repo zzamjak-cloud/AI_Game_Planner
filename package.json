@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "license": "GPL-3.0-only",
-  "author": "Loadcomplete",
+  "author": "zzamjak <zzamjak@gmail.com>",
   "type": "module",
   "scripts": {
     "dev": "vite",
