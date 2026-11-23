@@ -114,6 +114,7 @@ export async function streamWithContinuationClaude(
   let rounds = 0
   let pauseTurns = 0
   let continuingAfterCut = false
+  let afterNonTextBlock = false
   let stoppedReason: ClaudeStreamResult['stoppedReason']
 
   try {
@@ -143,14 +144,18 @@ export async function streamWithContinuationClaude(
         accumulated += delta
         options.onChunk?.({ candidates: [{ content: { role: 'model', parts: [{ text: delta }] } }] })
       }
-      // 검색 사이에 나뉜 텍스트 블록이 이어붙어 헤딩이 줄 중간에 오지 않도록 구분한다
-      // 단, max_tokens 이어쓰기 라운드의 첫 블록은 끊긴 문장에 바로 이어져야 한다
-      let blockCount = 0
+      // 검색 등 비텍스트 블록을 사이에 둔 텍스트만 문단을 나눈다.
+      // 인용(citation)은 한 문장도 여러 텍스트 블록으로 쪼개므로, 연속된 텍스트 블록은 그대로 이어 붙인다.
+      // max_tokens 이어쓰기 라운드는 끊긴 문장에 바로 이어져야 하므로 경계를 지운다.
+      if (continuingAfterCut) afterNonTextBlock = false
       stream.on('streamEvent', (event) => {
-        if (event.type !== 'content_block_start' || event.content_block.type !== 'text') return
-        const continuesCut = blockCount === 0 && continuingAfterCut
-        blockCount++
-        if (accumulated && !accumulated.endsWith('\n') && !continuesCut) emit('\n\n')
+        if (event.type !== 'content_block_start') return
+        if (event.content_block.type !== 'text') {
+          afterNonTextBlock = true
+          return
+        }
+        if (afterNonTextBlock && accumulated && !accumulated.endsWith('\n')) emit('\n\n')
+        afterNonTextBlock = false
       })
       stream.on('text', (delta) => {
         if (delta) emit(delta)
