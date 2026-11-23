@@ -200,18 +200,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 기존 롤링 릴리스 삭제 (있으면)
-          gh release delete latest \
-            --repo "${{ github.repository }}" \
-            --yes || true
+          REPO="${{ github.repository }}"
+          NOTES="자동 업데이트용 릴리스입니다. 직접 다운로드하지 마세요. 최신 버전: ${{ github.ref_name }}"
 
-          # 기존 태그 삭제 (있으면)
-          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/latest" || true
+          # 릴리스·태그를 지우고 다시 만들면 GitHub 쪽 반영 지연으로 초안(untagged)으로 남아
+          # 업데이트 주소가 404가 될 수 있다. 기존 롤링 릴리스는 지우지 않고 latest.json 만 교체한다.
+          if gh release view latest --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload latest ./artifacts/latest.json --repo "$REPO" --clobber
+            gh release edit latest --repo "$REPO" --notes "$NOTES" --draft=false --prerelease
+          else
+            gh release create latest \
+              --repo "$REPO" \
+              --title "AI Game Planner Latest (Auto-Update)" \
+              --notes "$NOTES" \
+              --prerelease \
+              ./artifacts/latest.json
+            gh release edit latest --repo "$REPO" --draft=false
+          fi
 
-          # 새 롤링 릴리스 생성
-          gh release create latest \
-            --repo "${{ github.repository }}" \
-            --title "AI Game Planner Latest (Auto-Update)" \
-            --notes "자동 업데이트용 릴리스입니다. 직접 다운로드하지 마세요. 최신 버전: ${{ github.ref_name }}" \
-            --prerelease \
-            ./artifacts/latest.json
+          # 공개 주소에서 실제로 새 버전이 내려오는지 확인한다
+          EXPECTED="${{ github.ref_name }}"
+          EXPECTED="${EXPECTED#v}"
+          for i in $(seq 1 10); do
+            GOT=$(curl -sfL "https://github.com/${REPO}/releases/download/latest/latest.json?t=$(date +%s)" | jq -r .version || true)
+            [ "$GOT" = "$EXPECTED" ] && echo "업데이트 주소 확인: $GOT" && exit 0
+            sleep 15
+          done
+          echo "업데이트 주소가 $EXPECTED 를 반환하지 않습니다 (받은 값: ${GOT:-없음})" && exit 1
