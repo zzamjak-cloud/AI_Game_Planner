@@ -50,6 +50,12 @@ export interface ClaudeStreamResult extends ContinuationResult {
 
 export type ClaudeEffort = 'low' | 'medium' | 'high'
 
+// 추론이 출력 예산을 모두 먹어 텍스트가 비면 한 단계 낮춰 재시도한다 (low 이후는 null)
+function lowerEffort(effort: string): ClaudeEffort | null {
+  if (effort === 'low') return null
+  return effort === 'medium' ? 'low' : 'medium'
+}
+
 export interface ClaudeStreamOptions {
   onChunk?: (chunk: GeminiStreamChunk) => void
   signal?: AbortSignal
@@ -115,18 +121,21 @@ export async function streamWithContinuationClaude(
   let pauseTurns = 0
   let continuingAfterCut = false
   let afterNonTextBlock = false
+  let emptyRetries = 0
+  let effort: ClaudeEffort = options.effort ?? 'high'
   let stoppedReason: ClaudeStreamResult['stoppedReason']
 
   try {
     while (true) {
       rounds++
+      const roundStartLength = accumulated.length
       const stream = client.beta.messages.stream(
         {
           model,
           max_tokens: MAX_TOKENS,
           cache_control: { type: 'ephemeral' },
           thinking: { type: 'adaptive' },
-          output_config: { effort: options.effort ?? 'high' },
+          output_config: { effort },
           ...(options.webSearch
             ? { tools: [{ type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: 10 }] }
             : {}),
@@ -167,7 +176,19 @@ export async function streamWithContinuationClaude(
         throw new ClaudeRefusalError(accumulated.length > 0)
       }
 
+      const wasContinuing: boolean = continuingAfterCut
       continuingAfterCut = false
+
+      // 사고만 하다 max_tokens에 걸려 텍스트가 전혀 없으면, 빈 턴을 되돌려 보내지 않고 같은 요청을 추론을 낮춰 재시도한다
+      if (message.stop_reason === 'max_tokens' && accumulated.length === roundStartLength) {
+        const lowered = lowerEffort(effort)
+        if (lowered) {
+          effort = lowered
+          emptyRetries++
+          continuingAfterCut = wasContinuing
+          continue
+        }
+      }
 
       if (message.stop_reason === 'pause_turn') {
         if (++pauseTurns > MAX_PAUSE_TURNS) {
@@ -183,7 +204,7 @@ export async function streamWithContinuationClaude(
       }
 
       if (message.stop_reason === 'max_tokens') {
-        if (rounds - pauseTurns >= MAX_CONTINUATION_ROUNDS) {
+        if (rounds - pauseTurns - emptyRetries >= MAX_CONTINUATION_ROUNDS) {
           truncated = true
           stoppedReason = 'max_tokens'
           break
@@ -232,35 +253,45 @@ export async function generateContentClaude(
 ): Promise<string> {
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
   const config = options.config ?? {}
-  const effort = (config.reasoning as { effort?: string } | undefined)?.effort
+  const configured = (config.reasoning as { effort?: string } | undefined)?.effort
+  let effort: ClaudeEffort = configured === 'low' || configured === 'medium' ? configured : 'high'
   const requested = typeof config.max_tokens === 'number' ? config.max_tokens : DEFAULT_GENERATE_TOKENS
 
   try {
-    const message = await client.beta.messages
-      .stream(
-        {
-          model,
-          max_tokens: Math.min(Math.max(requested, MIN_GENERATE_TOKENS), MAX_TOKENS),
-          cache_control: { type: 'ephemeral' },
-          thinking: { type: 'adaptive' },
-          output_config: { effort: effort === 'low' || effort === 'medium' || effort === 'high' ? effort : 'high' },
-          ...(supportsFallbacks(model)
-            ? { betas: ['server-side-fallback-2026-07-01' as const], fallbacks: 'default' as const }
-            : {}),
-          system: options.system,
-          messages: toMessages(contents),
-        },
-        { signal: options.signal }
-      )
-      .finalMessage()
+    while (true) {
+      const message = await client.beta.messages
+        .stream(
+          {
+            model,
+            max_tokens: Math.min(Math.max(requested, MIN_GENERATE_TOKENS), MAX_TOKENS),
+            cache_control: { type: 'ephemeral' },
+            thinking: { type: 'adaptive' },
+            output_config: { effort },
+            ...(supportsFallbacks(model)
+              ? { betas: ['server-side-fallback-2026-07-01' as const], fallbacks: 'default' as const }
+              : {}),
+            system: options.system,
+            messages: toMessages(contents),
+          },
+          { signal: options.signal }
+        )
+        .finalMessage()
 
-    if (message.stop_reason === 'refusal') {
-      throw new ClaudeRefusalError(false)
+      if (message.stop_reason === 'refusal') {
+        throw new ClaudeRefusalError(false)
+      }
+
+      const text = message.content.map((b) => (b.type === 'text' ? b.text : '')).join('')
+      if (!text && message.stop_reason === 'max_tokens') {
+        const lowered = lowerEffort(effort)
+        if (lowered) {
+          effort = lowered
+          continue
+        }
+      }
+      if (!text) throw new Error('응답 본문이 비어 있습니다.')
+      return text
     }
-
-    const text = message.content.map((b) => (b.type === 'text' ? b.text : '')).join('')
-    if (!text) throw new Error('응답 본문이 비어 있습니다.')
-    return text
   } catch (error) {
     if (options.signal?.aborted) throw error
     throw toKoreanError(error)

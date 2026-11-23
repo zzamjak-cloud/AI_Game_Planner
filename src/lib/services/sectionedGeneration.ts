@@ -27,6 +27,8 @@ export interface SectionPlan {
   title: string
   // 템플릿에 정의된 해당 섹션의 양식 원문
   spec: string
+  // 첫 섹션에만 채워진다: 첫 # 헤더 앞의 머리말(문서 제목 줄·메타 줄)
+  preamble?: string
 }
 
 /**
@@ -80,6 +82,7 @@ export function planSections(template: string): SectionPlan[] {
   const lines = body.split('\n')
   const sections: SectionPlan[] = []
   let current: { title: string; lines: string[] } | null = null
+  const preambleLines: string[] = []
 
   for (const line of lines) {
     const match = line.match(/^#\s+(.+)$/)
@@ -93,9 +96,11 @@ export function planSections(template: string): SectionPlan[] {
       continue
     }
 
-    // 첫 헤더 이전의 머리말(문서 제목 등)은 섹션에 속하지 않으므로 버린다
+    // 첫 헤더 이전의 머리말(문서 제목 등)은 섹션 양식이 아니라 첫 섹션 출력 앞에 붙일 머리말로 보관한다
     if (current) {
       current.lines.push(line)
+    } else {
+      preambleLines.push(line)
     }
   }
 
@@ -107,6 +112,9 @@ export function planSections(template: string): SectionPlan[] {
     devLog.log(`📐 [섹션] 섹션이 ${sections.length}개뿐이라 분할하지 않음 - 단일 호출로 폴백`)
     return []
   }
+
+  const preamble = preambleLines.join('\n').trim()
+  if (preamble) sections[0].preamble = preamble
 
   devLog.log(`📐 [섹션] ${sections.length}개 섹션으로 분할:`, sections.map((s) => s.title))
   return sections
@@ -127,10 +135,13 @@ ${section.spec}
 # 절대 준수 사항
 - 위에 지정된 섹션 하나만 작성하십시오. 다른 섹션은 절대 작성하지 마십시오.
 - \`<markdown_content>\` 태그를 사용하지 마십시오. 마크다운 본문만 출력하십시오.
-- 섹션 제목 줄(\`# ${section.title}\`)부터 시작하십시오.
-- 설명·머리말·맺음말을 붙이지 마십시오. 섹션 본문만 출력하십시오.
+${
+    section.preamble
+      ? `- 먼저 아래 머리말을 {게임명} 등 자리표시자를 실제 값으로 채워 **그대로 출력**한 뒤, 이어서 섹션 제목 줄(\`# ${section.title}\`)을 쓰십시오.\n\n[머리말]\n${section.preamble}\n\n`
+      : `- 섹션 제목 줄(\`# ${section.title}\`)부터 시작하십시오.\n`
+  }- 위 머리말 외의 설명·머리말·맺음말을 붙이지 마십시오. 섹션 본문만 출력하십시오.
 - 이미 확정된 앞 섹션들과 게임명·장르·핵심 게임 루프·수치가 반드시 일관되어야 합니다.
-- 이 섹션에 배정된 분량을 충실히 채우십시오. 다음 섹션은 별도로 요청됩니다.`
+- 양식의 모든 항목을 빠짐없이, 간결하게 채우십시오. 서술보다 표를 우선하고, 앞 섹션에 이미 쓴 내용은 반복하지 말고 ID로 참조하십시오. 다음 섹션은 별도로 요청됩니다.`
 }
 
 export interface SectionedGenerationCallbacks {
@@ -190,31 +201,57 @@ export async function generateSectioned(
       parts: [{ text: buildSectionInstruction(section, i, sections.length) }],
     })
 
-    let sectionText = ''
+    // 빈 응답이거나 최상위 헤더가 없으면 한 번 더 시도한다
+    let sectionResult = { text: '', truncated: false }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let streamed = ''
+      const result = await stream(apiKey, contents, {
+        model,
+        hooks,
+        onChunk: (chunk) => {
+          const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text || ''
+          if (!text) return
 
-    const result = await stream(apiKey, contents, {
-      model,
-      hooks,
-      onChunk: (chunk) => {
-        const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text || ''
-        if (!text) return
+          streamed += text
+          // 확정된 문서 + 현재 작성 중인 섹션을 합쳐 실시간 반영
+          callbacks.onMarkdownUpdate(joinSections(document, streamed))
+        },
+      })
+      sectionResult = { text: stripStrayTags(result.text || streamed), truncated: result.truncated }
+      if (/^#\s+\S/m.test(sectionResult.text)) break
+      devLog.warn(`⚠️ [섹션] "${section.title}" 섹션이 비었거나 헤더가 없음 (${attempt + 1}/2)`)
+    }
 
-        sectionText += text
-        // 확정된 문서 + 현재 작성 중인 섹션을 합쳐 실시간 반영
-        callbacks.onMarkdownUpdate(joinSections(document, sectionText))
-      },
-    })
-
-    if (result.truncated) {
+    let sectionText = sectionResult.text
+    if (!/^#\s+\S/m.test(sectionText)) {
+      // 구조는 유지하고, 해당 섹션만 다시 생성하도록 안내한다
+      sectionText = `# ${section.title}\n\n> ⚠️ 이 섹션은 생성에 실패했습니다. 이 섹션만 다시 생성해 주세요.`
+      anyTruncated = true
+    } else if (sectionResult.truncated) {
       anyTruncated = true
       devLog.warn(`⚠️ [섹션] "${section.title}" 섹션이 이어쓰기 한도 내에서 완결되지 않았습니다.`)
     }
 
-    document = joinSections(document, stripStrayTags(result.text || sectionText))
+    document = joinSections(document, sectionText)
     callbacks.onMarkdownUpdate(document)
   }
 
+  // 게임명 행은 뒤 섹션에 있으므로 전체 문서가 완성된 뒤에 머리말을 보정한다
+  const preamble = sections[0]?.preamble
+  if (preamble) document = ensurePreamble(document, preamble)
+
+  callbacks.onMarkdownUpdate(document)
   return { markdown: document, truncated: anyTruncated }
+}
+
+// 첫 헤더 앞에 아무 머리말도 없으면 템플릿 머리말을 붙인다. {게임명}은 "게임명" 표 행에서 찾아 채운다
+export function ensurePreamble(sectionText: string, preamble: string): string {
+  const firstHeading = sectionText.search(/^#\s+\S/m)
+  if (firstHeading > 0 && sectionText.slice(0, firstHeading).trim()) return sectionText
+
+  const name = sectionText.match(/\|\s*게임명\s*\|\s*([^|]+?)\s*\|/)?.[1]?.replace(/\*\*/g, '').trim()
+  const filled = name ? preamble.replace(/\{게임명\}/g, name) : preamble
+  return `${filled}\n\n${sectionText.slice(Math.max(firstHeading, 0))}`
 }
 
 // 섹션 사이를 빈 줄로 구분해 이어붙인다

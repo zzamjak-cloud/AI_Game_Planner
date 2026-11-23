@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Lightbulb, Loader2, Star, Copy, Check, Sparkles, StickyNote } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { useIdeaGenerator } from '../hooks/useIdeaGenerator'
-import { createQuickNotePage } from '../lib/services/quickNoteService'
+import { exportDocumentToQuickNote } from '../lib/services/quickNoteService'
 import { buildIdeaMarkdown } from '../lib/utils/ideaMarkdown'
 
 // 로딩 중 버튼에 돌아가며 표시할 문구
@@ -38,7 +38,7 @@ export function IdeaPanel() {
     setIsQuickNoteLoading(true)
 
     try {
-      await createQuickNotePage(
+      await exportDocumentToQuickNote(
         { token: quickNoteToken, url: quickNoteMcpUrl },
         quickNoteIdeaDatabaseId,
         currentIdea.title,

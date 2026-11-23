@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useAppStore, SessionType } from '../store/useAppStore'
 import { getSettings, saveTemplates, removeLegacyCollectionData } from '../lib/store'
-import { DEFAULT_TEMPLATES, DEFAULT_PLANNING_TEMPLATE, DEFAULT_STORY_TEMPLATE, DEFAULT_ANALYSIS_TEMPLATE } from '../lib/templateDefaults'
+import { DEFAULT_TEMPLATES } from '../lib/templateDefaults'
 import { migrateSessions, migrateSettings } from '../lib/migrations'
 import { devLog } from '../lib/utils/logger'
 
@@ -65,63 +65,30 @@ export function useAppInitialization(options: UseAppInitializationOptions = {}) 
         if (settings.promptTemplates && settings.promptTemplates.length > 0) {
           devLog.log('✅ 기존 템플릿:', settings.promptTemplates.length, '개')
 
-          // 기본 템플릿이 있는지 확인
-          const hasPlanningTemplate = settings.promptTemplates.some(t => t.id === 'default-planning')
-          const hasStoryTemplate = settings.promptTemplates.some(t => t.id === 'default-story')
-          const hasAnalysisTemplate = settings.promptTemplates.some(t => t.id === 'default-analysis')
-
-          // 기본 템플릿이 없으면 추가
-          if (!hasPlanningTemplate || !hasStoryTemplate || !hasAnalysisTemplate) {
-            devLog.log('⚠️ 기본 템플릿 누락, 복구 중')
-            const templatesToSave = [...settings.promptTemplates]
-
-            if (!hasPlanningTemplate) {
-              templatesToSave.push(DEFAULT_PLANNING_TEMPLATE)
-              devLog.log('✅ 기본 기획 템플릿 복구')
+          // 기본 템플릿: 누락된 것은 추가하고, 내용이 바뀐 것은 코드의 최신 내용으로 갱신한다
+          const defaultsById = new Map(DEFAULT_TEMPLATES.map(t => [t.id, t]))
+          let changed = false
+          const updatedTemplates = settings.promptTemplates.map(t => {
+            const def = defaultsById.get(t.id)
+            if (def && t.content !== def.content) {
+              devLog.log('🔄 기본 템플릿 내용 업데이트:', t.id)
+              changed = true
+              return { ...t, content: def.content, updatedAt: Date.now() }
             }
-
-            if (!hasStoryTemplate) {
-              templatesToSave.push(DEFAULT_STORY_TEMPLATE)
-              devLog.log('✅ 기본 스토리 템플릿 복구')
+            return t
+          })
+          for (const def of DEFAULT_TEMPLATES) {
+            if (!updatedTemplates.some(t => t.id === def.id)) {
+              devLog.log('✅ 기본 템플릿 추가:', def.id)
+              updatedTemplates.push(def)
+              changed = true
             }
+          }
 
-            if (!hasAnalysisTemplate) {
-              templatesToSave.push(DEFAULT_ANALYSIS_TEMPLATE)
-              devLog.log('✅ 기본 분석 템플릿 복구')
-            }
-
-            useAppStore.setState({ templates: templatesToSave })
-            await saveTemplates(templatesToSave)
-            devLog.log('✅ 템플릿 복구:', templatesToSave.length, '개')
-          } else {
-            // 기본 템플릿 내용 업데이트 (content가 다르면 업데이트)
-            let needsUpdate = false
-            const updatedTemplates = settings.promptTemplates.map(t => {
-              if (t.id === 'default-planning' && t.content !== DEFAULT_PLANNING_TEMPLATE.content) {
-                devLog.log('🔄 기본 기획 템플릿 내용 업데이트')
-                needsUpdate = true
-                return { ...t, content: DEFAULT_PLANNING_TEMPLATE.content, updatedAt: Date.now() }
-              }
-              if (t.id === 'default-story' && t.content !== DEFAULT_STORY_TEMPLATE.content) {
-                devLog.log('🔄 기본 스토리 템플릿 내용 업데이트')
-                needsUpdate = true
-                return { ...t, content: DEFAULT_STORY_TEMPLATE.content, updatedAt: Date.now() }
-              }
-              if (t.id === 'default-analysis' && t.content !== DEFAULT_ANALYSIS_TEMPLATE.content) {
-                devLog.log('🔄 기본 분석 템플릿 내용 업데이트')
-                needsUpdate = true
-                return { ...t, content: DEFAULT_ANALYSIS_TEMPLATE.content, updatedAt: Date.now() }
-              }
-              return t
-            })
-
-            if (needsUpdate) {
-              useAppStore.setState({ templates: updatedTemplates })
-              await saveTemplates(updatedTemplates)
-              devLog.log('✅ 기본 템플릿 업데이트 완료')
-            } else {
-              useAppStore.setState({ templates: settings.promptTemplates })
-            }
+          useAppStore.setState({ templates: updatedTemplates })
+          if (changed) {
+            await saveTemplates(updatedTemplates)
+            devLog.log('✅ 기본 템플릿 동기화 완료')
           }
         } else {
           devLog.log('🆕 기본 템플릿 생성')

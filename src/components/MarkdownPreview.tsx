@@ -6,7 +6,7 @@ import { Copy, Check, Loader2, Download, History, CheckCircle2, FileText, Sticky
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { useAppStore, SessionType } from '../store/useAppStore'
-import { createQuickNotePage } from '../lib/services/quickNoteService'
+import { exportDocumentToQuickNote } from '../lib/services/quickNoteService'
 import { extractGameNameFromPlanning, extractGameNameFromAnalysis, removeHtmlComments } from '../lib/utils/markdown'
 import { VersionHistory } from './VersionHistory'
 import { ChecklistPanel } from './ChecklistPanel'
@@ -30,6 +30,7 @@ export function MarkdownPreview() {
 
   const [isCopied, setIsCopied] = useState(false)
   const [isQuickNoteLoading, setIsQuickNoteLoading] = useState(false)
+  const [quickNoteProgress, setQuickNoteProgress] = useState('')
 
   const isAnalysisMode = currentSession?.type === SessionType.ANALYSIS
 
@@ -116,11 +117,12 @@ export function MarkdownPreview() {
 
     try {
       const title = `${gameName} : ${isAnalysisMode ? '게임 분석' : '게임 기획서'}`
-      await createQuickNotePage(
+      await exportDocumentToQuickNote(
         { token: quickNoteToken, url: quickNoteMcpUrl },
         databaseId,
         title,
-        removeHtmlComments(markdownContent)
+        removeHtmlComments(markdownContent),
+        (done, total) => setQuickNoteProgress(total > 1 ? `${done}/${total}` : '')
       )
       alert('QuickNote에 저장했습니다.')
     } catch (error) {
@@ -129,6 +131,7 @@ export function MarkdownPreview() {
       alert('QuickNote 저장에 실패했습니다.\n\n' + errorMessage)
     } finally {
       setIsQuickNoteLoading(false)
+      setQuickNoteProgress('')
     }
   }
 
@@ -217,10 +220,13 @@ export function MarkdownPreview() {
               onClick={handleSaveToQuickNote}
               disabled={isQuickNoteLoading || !markdownContent}
               className="p-2 rounded-lg bg-background hover:bg-accent transition-colors relative group disabled:opacity-50 disabled:cursor-not-allowed"
-              title={!markdownContent ? "내용이 없습니다" : "QuickNote에 저장"}
+              title={!markdownContent ? "내용이 없습니다" : isQuickNoteLoading && quickNoteProgress ? `QuickNote 전송 중 (${quickNoteProgress})` : "QuickNote에 저장"}
             >
               {isQuickNoteLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="flex items-center gap-1">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {quickNoteProgress && <span className="text-xs">{quickNoteProgress}</span>}
+                </span>
               ) : (
                 <StickyNote className="w-4 h-4" />
               )}

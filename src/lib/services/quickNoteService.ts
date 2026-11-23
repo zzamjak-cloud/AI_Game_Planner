@@ -1,7 +1,8 @@
 // QuickNote 외부 API(원격 MCP 서버, Streamable HTTP 무상태)
 
 import { fetch } from '@tauri-apps/plugin-http'
-import { QUICKNOTE_MAX_CONTENT_BYTES } from '../constants/quicknote'
+import { MAX_BYTES_PER_CALL, MAX_PAGES_PER_CALL } from '../constants/quicknote'
+import { byteLength, countPlanPages, planQuickNoteExport, type QuickNotePlanPage } from '../utils/quickNoteSplit'
 
 export interface QuickNoteConfig {
   token: string
@@ -131,21 +132,94 @@ export async function resolveQuickNoteDatabase(
   return { databaseId, title: extractTitle(dbMarkdown) }
 }
 
-export async function createQuickNotePage(
+async function createPages(
   cfg: QuickNoteConfig,
-  databaseId: string,
-  title: string,
-  markdown: string
-): Promise<string | undefined> {
-  if (new TextEncoder().encode(markdown).length > QUICKNOTE_MAX_CONTENT_BYTES) {
-    throw new Error('본문이 QuickNote 한도(512KB)를 초과해 저장할 수 없습니다')
+  parent: { databaseId: string } | { pageId: string },
+  pages: Array<{ title: string; content: string }>
+): Promise<Array<string | undefined>> {
+  // create_pages 는 페이지 항목에 모르는 키가 있으면 거절하므로 제목·본문만 보낸다
+  const payload = pages.map(({ title, content }) => ({ title, content }))
+  const result = (await callQuickNoteTool(cfg, 'create_pages', { parent, pages: payload })) as
+    | { pages?: Array<{ id: string }> }
+    | undefined
+  return pages.map((_, i) => result?.pages?.[i]?.id)
+}
+
+// 하위 페이지를 문서 순서대로 만들고(호출당 20개·300KB 이하), 분할된 페이지에는 목차를 덧붙인다
+async function createChildren(
+  cfg: QuickNoteConfig,
+  parentId: string,
+  node: QuickNotePlanPage,
+  tick: (count: number) => void
+): Promise<void> {
+  const ids: Array<string | undefined> = []
+  let batch: QuickNotePlanPage[] = []
+  let batchBytes = 0
+
+  const flush = async () => {
+    if (batch.length === 0) return
+    ids.push(...(await createPages(cfg, { pageId: parentId }, batch)))
+    tick(batch.length)
+    batch = []
+    batchBytes = 0
   }
 
-  const result = (await callQuickNoteTool(cfg, 'create_pages', {
-    parent: { databaseId },
-    pages: [{ title, content: markdown }],
-  })) as { pages?: Array<{ id: string }> } | undefined
+  for (const child of node.children) {
+    const bytes = byteLength(child.content)
+    if (batch.length >= MAX_PAGES_PER_CALL || (batch.length > 0 && batchBytes + bytes > MAX_BYTES_PER_CALL)) {
+      await flush()
+    }
+    batch.push(child)
+    batchBytes += bytes
+  }
+  await flush()
 
-  // 생성은 성공했으므로 ID가 없어도 오류로 취급하지 않는다
-  return result?.pages?.[0]?.id
+  for (let i = 0; i < node.children.length; i++) {
+    const id = ids[i]
+    if (id && node.children[i].children.length > 0) await createChildren(cfg, id, node.children[i], tick)
+  }
+
+  const toc = node.children
+    .map((child, i) => (ids[i] ? `- <mention-page id="${ids[i]}">${child.title}</mention-page>` : null))
+    .filter((line): line is string => line !== null)
+  if (toc.length > 0) {
+    await callQuickNoteTool(cfg, 'update_page', {
+      pageId: parentId,
+      content: { mode: 'append', markdown: `## 목차\n\n${toc.join('\n')}` },
+    })
+  }
+}
+
+/**
+ * 문서를 QuickNote 데이터베이스 행으로 저장한다. 크면 장·소절 단위 하위 페이지로 나눠 저장한다.
+ * @returns 행 페이지 ID
+ */
+export async function exportDocumentToQuickNote(
+  cfg: QuickNoteConfig,
+  databaseId: string,
+  rowTitle: string,
+  markdown: string,
+  onProgress?: (done: number, total: number) => void
+): Promise<string | undefined> {
+  const plan = planQuickNoteExport(markdown, rowTitle)
+  const total = countPlanPages(plan)
+  let done = 0
+  const tick = (count: number) => {
+    done += count
+    onProgress?.(done, total)
+  }
+
+  const [rowId] = await createPages(cfg, { databaseId }, [{ title: plan.title, content: plan.content }])
+  tick(1)
+
+  if (rowId && plan.children.length > 0) {
+    try {
+      await createChildren(cfg, rowId, plan, tick)
+    } catch (error) {
+      // 중간에 실패하면 본문이 빠진 행이 DB에 남지 않도록 휴지통으로 보낸다 (하위 페이지도 함께 이동)
+      await callQuickNoteTool(cfg, 'trash_page', { pageId: rowId }).catch(() => undefined)
+      throw error
+    }
+  }
+  return rowId
 }

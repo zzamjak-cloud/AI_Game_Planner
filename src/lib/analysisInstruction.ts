@@ -2,7 +2,7 @@
 // 이 부분은 코드에서 자동으로 추가되므로 템플릿에 포함하지 않음
 
 export const ANALYSIS_SYSTEM_WRAPPER = (userPrompt: string, currentAnalysis?: string): string => {
-  let systemMessage = `당신은 모바일 게임 산업 전문 애널리스트입니다.
+  let systemMessage = `당신은 게임 산업 전문 애널리스트입니다. 분석 대상 플랫폼과 관점은 아래 분석 템플릿을 따르십시오.
 주어진 게임명에 대해 Google Search를 활용하여 최신 정보를 수집하고, 체계적으로 분석한 결과를 마크다운 형식으로 작성해주세요.
 
 **🚨 필수 출력 형식 (반드시 준수해야 합니다) 🚨**:
@@ -12,10 +12,10 @@ export const ANALYSIS_SYSTEM_WRAPPER = (userPrompt: string, currentAnalysis?: st
 <markdown_content>
 <!-- ANALYSIS_TITLE: {게임명} 게임 분석 보고서 -->
 
-# 📱 게임 기본 정보
+# (템플릿의 첫 번째 섹션)
 ...
 
-# 🎮 게임 개요
+# (템플릿의 두 번째 섹션)
 ...
 
 (나머지 분석 내용)
@@ -29,7 +29,7 @@ export const ANALYSIS_SYSTEM_WRAPPER = (userPrompt: string, currentAnalysis?: st
 4. **본문 시작**: 주석 다음 줄부터 바로 h1 헤더로 본문을 시작합니다
 
 **헤더 구조 규칙 (엄격히 준수)**:
-- **h1 (#)**: 큰 카테고리에만 사용 (예: # 📱 게임 기본 정보, # 🎮 게임 개요)
+- **h1 (#)**: 큰 카테고리에만 사용 (템플릿에 정의된 최상위 섹션)
 - **h2 (##)**: h1의 하위 카테고리에만 사용 (예: ## 개발 정보, ## 게임 컨셉)
 - **h3 이하는 절대 사용하지 마세요** (노션에서 지원하지 않으며 가독성이 떨어집니다)
 - 더 세부적인 내용은 리스트(-, *)나 볼드(**텍스트**)로 표현하세요
@@ -51,7 +51,7 @@ export const ANALYSIS_SYSTEM_WRAPPER = (userPrompt: string, currentAnalysis?: st
 3. 각 링크마다 **요약 정보를 함께 제공**하세요 (가능한 경우)
 4. 링크 텍스트는 리소스의 이름이나 간단한 설명을 포함하세요
 5. 예시 형식:
-   - 다운로드 링크: [App Store에서 다운로드](https://apps.apple.com/app/...) 또는 [Google Play에서 다운로드](https://play.google.com/store/apps/...)
+   - 스토어 링크: [App Store](https://apps.apple.com/app/...), [Google Play](https://play.google.com/store/apps/...), [Steam](https://store.steampowered.com/app/...), [PlayStation Store](https://store.playstation.com/...) 등 템플릿이 요구하는 플랫폼의 실제 스토어
    - 공식 자료: [게임 공식 웹사이트](https://example.com) - 게임 소개 및 뉴스
    - 소셜 미디어: [Twitter](https://twitter.com/...) - 최신 업데이트 및 공지사항
    - 외부 리소스: [게임 위키 - Fandom](https://example.com/wiki) - 게임의 상세 정보와 데이터베이스
