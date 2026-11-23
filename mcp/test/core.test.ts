@@ -76,7 +76,7 @@ describe('프롬프트 구성 (앱과 공유)', () => {
   })
 
   test('기본 기획 템플릿은 9개 섹션으로 분할 생성된다', () => {
-    expect(planningSections(SYSTEM_INSTRUCTION, true).length).toBe(9)
+    expect(planningSections(SYSTEM_INSTRUCTION, true).length).toBe(15)
     expect(planningSections(SYSTEM_INSTRUCTION, false).length).toBe(0)
   })
 
@@ -171,7 +171,7 @@ describe('템플릿 해석', () => {
   })
 
   test('기획 템플릿 구조 미리보기: 양식 블록의 최상위 섹션 / 분할 불가', () => {
-    expect(templateStructure(TemplateType.PLANNING, SYSTEM_INSTRUCTION).sections!.length).toBe(9)
+    expect(templateStructure(TemplateType.PLANNING, SYSTEM_INSTRUCTION).sections!.length).toBe(15)
     expect(templateStructure(TemplateType.PLANNING, '# 하나\n# 둘').mode).toContain('단일 호출')
   })
 })
