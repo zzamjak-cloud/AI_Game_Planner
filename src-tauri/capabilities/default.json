@@ -38,9 +38,6 @@
       "identifier": "http:default",
       "allow": [
         {
-          "url": "https://api.notion.com/*"
-        },
-        {
           "url": "https://openrouter.ai/*"
         },
         {

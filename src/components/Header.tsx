@@ -2,6 +2,7 @@ import { Settings } from 'lucide-react'
 import { getVersion } from '@tauri-apps/api/app'
 import { ChangeEvent, useEffect, useState } from 'react'
 import { SELECTABLE_MODELS, normalizeChatModel } from '../lib/constants/api'
+import { CLAUDE_MODELS, normalizeClaudeModel } from '../lib/constants/claude'
 import { saveSettings } from '../lib/store'
 import { useAppStore } from '../store/useAppStore'
 
@@ -11,14 +12,32 @@ interface HeaderProps {
 
 export function Header({ onSettingsClick }: HeaderProps) {
   const [version, setVersion] = useState<string>('')
-  const { chatModel, setChatModel } = useAppStore()
+  const { chatModel, setChatModel, anthropicApiKey, claudeModel, setClaudeModel } = useAppStore()
+  const claudeActive = !!anthropicApiKey?.trim()
   const currentChatModel = normalizeChatModel(chatModel)
+  const currentClaudeModel = normalizeClaudeModel(claudeModel)
+  const modelOptions = claudeActive ? CLAUDE_MODELS : SELECTABLE_MODELS
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion('0.0.0'))
   }, [])
 
   const handleModelChange = async (event: ChangeEvent<HTMLSelectElement>) => {
+    // Claude 키가 있으면 Claude 모델 선택을 따로 저장한다
+    if (claudeActive) {
+      const previous = currentClaudeModel
+      const next = normalizeClaudeModel(event.target.value)
+      setClaudeModel(next)
+      try {
+        await saveSettings({ claudeModel: next })
+      } catch (error) {
+        console.error('AI 모델 저장 실패:', error)
+        setClaudeModel(previous)
+        alert('AI 모델 저장에 실패했습니다.')
+      }
+      return
+    }
+
     const previousModel = currentChatModel
     const nextModel = normalizeChatModel(event.target.value)
 
@@ -47,12 +66,12 @@ export function Header({ onSettingsClick }: HeaderProps) {
         </label>
         <select
           id="header-chat-model"
-          value={currentChatModel}
+          value={claudeActive ? currentClaudeModel : currentChatModel}
           onChange={handleModelChange}
           className="h-9 w-44 max-w-[42vw] rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           title="AI 모델"
         >
-          {SELECTABLE_MODELS.map((model) => (
+          {modelOptions.map((model) => (
             <option key={model.value} value={model.value}>
               {model.label}
             </option>

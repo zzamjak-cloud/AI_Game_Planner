@@ -14,11 +14,6 @@ export interface WindowState {
 
 export interface Settings {
   openRouterApiKey?: string | null
-  notionApiKey?: string | null
-  notionPlanningDatabaseId?: string | null
-  notionAnalysisDatabaseId?: string | null
-  notionIdeaDatabaseId?: string | null
-  oldNotionDbId?: string | null
   chatSessions?: ChatSession[]
   promptTemplates?: PromptTemplate[]
   currentPlanningTemplateId?: string | null
@@ -26,14 +21,26 @@ export interface Settings {
   windowState?: WindowState
   ideas?: GameIdea[]
   chatModel?: string | null
+  anthropicApiKey?: string | null
+  claudeModel?: string | null
+  quickNoteToken?: string | null
+  quickNoteMcpUrl?: string | null
+  quickNotePlanningDatabaseId?: string | null
+  quickNoteAnalysisDatabaseId?: string | null
+  quickNoteIdeaDatabaseId?: string | null
+  quickNoteDatabaseTitles?: Record<string, string> | null
 }
 
 export interface SaveSettingsParams {
   openRouterApiKey?: string
-  notionApiKey?: string
-  notionPlanningDatabaseId?: string
-  notionAnalysisDatabaseId?: string
-  notionIdeaDatabaseId?: string
   chatModel?: string
+  anthropicApiKey?: string
+  claudeModel?: string
+  quickNoteToken?: string
+  quickNoteMcpUrl?: string
+  quickNotePlanningDatabaseId?: string
+  quickNoteAnalysisDatabaseId?: string
+  quickNoteIdeaDatabaseId?: string
+  quickNoteDatabaseTitles?: Record<string, string>
 }
 

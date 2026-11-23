@@ -122,12 +122,14 @@ export function ReferenceManager({ sessionId }: ReferenceManagerProps) {
         }
 
         // 파일 요약 생성 (비용 최적화)
-        const { generateFileSummary, generateSimpleSummary } = await import('../lib/utils/fileOptimization')
-        const apiKey = useAppStore.getState().apiKey
+        const { generateSimpleSummary } = await import('../lib/utils/fileOptimization')
+        const { generateFileSummary } = await import('../lib/services/fileSummary')
+        const apiKey = useAppStore.getState().apiKey ?? ''
+        const { hasLlmKey } = await import('../lib/services/llmService')
         let summary: string
 
         try {
-          if (apiKey && parsed.text.length > 1000) {
+          if (hasLlmKey() && parsed.text.length > 1000) {
             // AI를 사용한 요약 생성 (내용이 1000자 이상인 경우)
             summary = await generateFileSummary(parsed.text, fileName, apiKey)
           } else {

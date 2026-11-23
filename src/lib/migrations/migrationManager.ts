@@ -61,14 +61,6 @@ export function migrateSessions(sessions: unknown[]): ChatSession[] {
 export function migrateSettings(settings: Settings): Settings {
   let migrated = settings
 
-  // Planning DB ID 마이그레이션 (기존 notion_database_id → notion_planning_database_id)
-  if (!migrated.notionPlanningDatabaseId && migrated.oldNotionDbId) {
-    migrated = {
-      ...migrated,
-      notionPlanningDatabaseId: migrated.oldNotionDbId,
-    }
-  }
-
   // 저장된 모델 ID를 현재 지원 목록으로 정규화
   if (migrated.chatModel) {
     const normalizedChatModel = normalizeChatModel(migrated.chatModel)

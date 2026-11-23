@@ -1,6 +1,7 @@
 import { SYSTEM_INSTRUCTION } from '../lib/systemInstruction'
 import { Message, useAppStore } from '../store/useAppStore'
-import { streamWithContinuation } from '../lib/services/openRouterService'
+import { ClaudeRefusalError } from '../lib/services/anthropicService'
+import { hasLlmKey, streamWithContinuation } from '../lib/services/llmService'
 import { generateSectioned, planSections } from '../lib/services/sectionedGeneration'
 import {
   buildPlanningContents,
@@ -29,7 +30,7 @@ export function useGeminiChat() {
     try {
       // API Key 검증 및 정리
       const cleanApiKey = String(apiKey || '').trim()
-      if (!cleanApiKey) {
+      if (!hasLlmKey()) {
         throw new Error('API Key가 비어있습니다')
       }
 
@@ -72,7 +73,9 @@ export function useGeminiChat() {
             onProgress: (message) => callbacks.onChatUpdate(message),
             onMarkdownUpdate: (md) => callbacks.onMarkdownUpdate(md),
           },
-          useAppStore.getState().chatModel
+          useAppStore.getState().chatModel,
+          undefined,
+          streamWithContinuation
         )
 
         callbacks.onMarkdownUpdate(markdown)
@@ -183,6 +186,8 @@ export function useGeminiChat() {
       callbacks.onComplete(chatText)
     } catch (error) {
       console.error('OpenRouter API Error:', error)
+      // 응답 도중 거부되면 스트리밍으로 채운 미리보기를 이전 상태로 되돌린다
+      if (error instanceof ClaudeRefusalError) callbacks.onMarkdownUpdate(currentMarkdown ?? '')
       callbacks.onError(
         error instanceof Error ? error : new Error('알 수 없는 오류가 발생했습니다')
       )

@@ -22,7 +22,6 @@ export interface ReferenceGame {
   strengths: string[]                        // 강점
   weaknesses: string[]                       // 약점
   markdownContent?: string                  // 분석 보고서 내용 (요약)
-  notionPageUrl?: string                    // Notion 페이지 URL
   tags: string[]                            // 태그 (검색용)
   createdAt: number
   updatedAt: number

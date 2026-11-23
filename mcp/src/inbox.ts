@@ -56,10 +56,14 @@ export function inboxDir(dataDir: string): string {
 }
 
 /** 수신함에 항목 하나를 남긴다 → 파일 경로 */
+// 같은 밀리초에 쓴 항목도 파일 이름 정렬이 기록 순서를 따르도록 붙이는 순번
+let inboxSeq = 0
+
 export function sendToApp(dataDir: string, entry: InboxEntry): string {
   const now = new Date()
   const stamp = now.toISOString().replace(/[-:.TZ]/g, '')
-  const path = join(inboxDir(dataDir), `${stamp}-${randomUUID().slice(0, 8)}-${entry.kind}.json`)
+  const seq = String(inboxSeq++ % 1_000_000).padStart(6, '0')
+  const path = join(inboxDir(dataDir), `${stamp}-${seq}-${randomUUID().slice(0, 8)}-${entry.kind}.json`)
   writeAtomic(
     path,
     JSON.stringify({ version: INBOX_VERSION, source: 'gp-mcp', created_at: now.toISOString(), ...entry }, null, 2)

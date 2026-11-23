@@ -32,7 +32,7 @@ export interface SessionSlice {
 
   // 분석 세션 관리
   createAnalysisSession: (gameName: string, templateId?: string) => string
-  updateAnalysisStatus: (sessionId: string, status: string, notionUrl?: string) => void
+  updateAnalysisStatus: (sessionId: string, status: string) => void
   convertAnalysisToPlanning: (analysisSessionId: string) => string
 
   // 버전 관리 (Phase 1)
@@ -255,14 +255,13 @@ export const createSessionSlice: StateCreator<
   },
 
   // 분석 상태 업데이트
-  updateAnalysisStatus: (sessionId: string, status: string, notionUrl?: string) => {
+  updateAnalysisStatus: (sessionId: string, status: string) => {
     set((state) => ({
       sessions: state.sessions.map((session) => {
         if (session.id === sessionId) {
           return {
             ...session,
             analysisStatus: status as 'pending' | 'running' | 'completed' | 'failed',
-            notionPageUrl: notionUrl || session.notionPageUrl,
             updatedAt: Date.now(),
           }
         }
@@ -286,7 +285,7 @@ export const createSessionSlice: StateCreator<
       title: generateSessionTitle(SessionType.PLANNING, analysisSession.gameName),
       messages: [{
         role: 'user',
-        content: `"${analysisSession.gameName}" 게임을 분석했습니다.\n\n${analysisSession.notionPageUrl ? `분석 결과: ${analysisSession.notionPageUrl}\n\n` : ''}${analysisSession.markdownContent ? `\n\n분석 내용:\n${analysisSession.markdownContent}\n\n` : ''}이 분석을 참고하여 유사한 장르의 신규 게임 기획서를 작성해주세요.`
+        content: `"${analysisSession.gameName}" 게임을 분석했습니다.\n\n${analysisSession.markdownContent ? `\n\n분석 내용:\n${analysisSession.markdownContent}\n\n` : ''}이 분석을 참고하여 유사한 장르의 신규 게임 기획서를 작성해주세요.`
       }],
       markdownContent: '',
       createdAt: Date.now(),

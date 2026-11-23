@@ -8,6 +8,7 @@ import { appendReferenceFiles } from '../lib/prompts/documentPrompt'
 import { saveSessionImmediately } from '../lib/utils/sessionSave'
 import { devLog } from '../lib/utils/logger'
 import { handleError } from '../lib/errorHandler'
+import { hasLlmKey } from '../lib/services/llmService'
 
 interface MessageHandlerCallbacks {
   onChatUpdate?: (text: string) => void
@@ -35,7 +36,7 @@ export function useMessageHandler() {
     message: string,
     callbacks: MessageHandlerCallbacks = {}
   ) => {
-    if (!apiKey) {
+    if (!hasLlmKey()) {
       throw new Error('API Key를 먼저 설정해주세요')
     }
 
@@ -112,7 +113,7 @@ export function useMessageHandler() {
     try {
       // 대화 히스토리와 현재 분석 내용, 템플릿 프롬프트를 함께 전달
       await analyzeGame(
-        apiKey!,
+        apiKey ?? '',
         message,
         {
           onChatUpdate: (text) => {
@@ -189,7 +190,7 @@ export function useMessageHandler() {
     try {
       // 대화 히스토리와 현재 마크다운, 템플릿 프롬프트를 함께 전달
       await sendMessage(
-        apiKey!,
+        apiKey ?? '',
         message,
         {
           onChatUpdate: (text) => {

@@ -31,7 +31,6 @@ export interface ChatSession {
 
   // 분석 세션 전용 필드 (optional)
   gameName?: string
-  notionPageUrl?: string
   analysisStatus?: 'pending' | 'running' | 'completed' | 'failed'
 
   // 템플릿 연동

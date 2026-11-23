@@ -2,11 +2,11 @@
  * 프롬프트 번역 훅
  * 한국어 ↔ 영어 양방향 번역 지원
  *
- * 실제 API 호출은 openRouterService로 위임한다.
+ * 실제 API 호출은 llmService(Claude 키 우선, 없으면 OpenRouter)로 위임한다.
  * 재시도 정책과 모델 선택 로직을 다른 호출 경로와 공유하기 위함이다.
  */
 
-import { translateText } from '../lib/services/openRouterService'
+import { translateText } from '../lib/services/llmService'
 
 export function useTranslation() {
   /**

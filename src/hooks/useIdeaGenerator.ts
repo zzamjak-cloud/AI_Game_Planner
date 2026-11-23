@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
+import { generateContent, hasLlmKey } from '../lib/services/llmService'
 import { generateGameIdea } from '../lib/services/ideaService'
 import { handleError } from '../lib/errorHandler'
 
@@ -19,7 +20,7 @@ export function useIdeaGenerator() {
   const generate = useCallback(async (): Promise<boolean> => {
     if (isGeneratingIdea) return false
 
-    if (!apiKey) {
+    if (!hasLlmKey()) {
       setError('API Key를 먼저 설정해주세요')
       return false
     }
@@ -34,7 +35,7 @@ export function useIdeaGenerator() {
         .ideas.slice(0, RECENT_TITLE_COUNT)
         .map((i) => i.title)
 
-      const idea = await generateGameIdea(apiKey, chatModel, recentTitles)
+      const idea = await generateGameIdea(apiKey ?? '', chatModel, recentTitles, { generate: generateContent })
       addIdea(idea)
       return true
     } catch (e) {

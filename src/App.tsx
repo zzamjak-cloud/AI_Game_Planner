@@ -15,6 +15,7 @@ import { useAutoSave } from './hooks/useAutoSave'
 import { useMessageHandler } from './hooks/useMessageHandler'
 import { useAutoUpdate } from './hooks/useAutoUpdate'
 import { useMcpInbox } from './hooks/useMcpInbox'
+import { hasLlmKey } from './lib/services/llmService'
 import { CHAT_PANEL_WIDTH } from './lib/constants/ui'
 
 function App() {
@@ -28,7 +29,7 @@ function App() {
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null)
   const [infoDialog, setInfoDialog] = useState<{ title: string; message: string } | null>(null)
   // sessions 구독 제거 - 렉 방지 (필요할 때만 getState()로 가져옴)
-  const { apiKey, currentSessionId, currentSessionType, createVersion, setActivePreviewTab } = useAppStore()
+  const { currentSessionId, currentSessionType, createVersion, setActivePreviewTab } = useAppStore()
 
   // 자동 업데이트
   const {
@@ -64,7 +65,7 @@ function App() {
   const { handleSendMessage } = useMessageHandler()
 
   const handleSendMessageWrapper = async (message: string) => {
-    if (!apiKey) {
+    if (!hasLlmKey()) {
       setInfoDialog({
         title: 'API Key 필요',
         message: 'API Key를 먼저 설정해주세요'

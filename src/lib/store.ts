@@ -72,10 +72,6 @@ export async function getSettings(): Promise<Settings> {
   const store = await getStore()
 
   const openRouterApiKey = await store.get<string>('openrouter_api_key')
-  const notionApiKey = await store.get<string>('notion_api_key')
-  const notionPlanningDatabaseId = await store.get<string>('notion_planning_database_id')
-  const notionAnalysisDatabaseId = await store.get<string>('notion_analysis_database_id')
-  const notionIdeaDatabaseId = await store.get<string>('notion_idea_database_id')
   const chatSessions = await store.get<ChatSession[]>('chat_sessions')
 
   // 로그 제거: 너무 빈번하게 호출됨
@@ -86,8 +82,6 @@ export async function getSettings(): Promise<Settings> {
   //   console.log('  - 세션 목록:', chatSessions.map(s => `${s.title} (${s.type})`).join(', '))
   // }
 
-  // 마이그레이션: 기존 notion_database_id 확인
-  const oldNotionDbId = await store.get<string>('notion_database_id')
 
   // 템플릿 관련 설정
   const promptTemplates = await store.get<PromptTemplate[]>('prompt_templates')
@@ -103,13 +97,17 @@ export async function getSettings(): Promise<Settings> {
   // 채팅 모델
   const chatModel = await store.get<string>('chat_model')
 
+  const anthropicApiKey = await store.get<string>('anthropic_api_key')
+  const claudeModel = await store.get<string>('claude_model')
+  const quickNoteToken = await store.get<string>('quicknote_token')
+  const quickNoteMcpUrl = await store.get<string>('quicknote_mcp_url')
+  const quickNotePlanningDatabaseId = await store.get<string>('quicknote_planning_database_id')
+  const quickNoteAnalysisDatabaseId = await store.get<string>('quicknote_analysis_database_id')
+  const quickNoteIdeaDatabaseId = await store.get<string>('quicknote_idea_database_id')
+  const quickNoteDatabaseTitles = await store.get<Record<string, string>>('quicknote_database_titles')
+
   const rawSettings: Settings = {
     openRouterApiKey,
-    notionApiKey,
-    notionPlanningDatabaseId,
-    notionAnalysisDatabaseId,
-    notionIdeaDatabaseId,
-    oldNotionDbId,
     chatSessions,
     promptTemplates,
     currentPlanningTemplateId,
@@ -117,6 +115,14 @@ export async function getSettings(): Promise<Settings> {
     windowState,
     ideas,
     chatModel,
+    anthropicApiKey,
+    claudeModel,
+    quickNoteToken,
+    quickNoteMcpUrl,
+    quickNotePlanningDatabaseId,
+    quickNoteAnalysisDatabaseId,
+    quickNoteIdeaDatabaseId,
+    quickNoteDatabaseTitles,
   }
 
   // 설정 마이그레이션 적용
@@ -132,20 +138,32 @@ export async function saveSettings(settings: SaveSettingsParams): Promise<void> 
   if (settings.openRouterApiKey !== undefined) {
     await store.set('openrouter_api_key', settings.openRouterApiKey)
   }
-  if (settings.notionApiKey !== undefined) {
-    await store.set('notion_api_key', settings.notionApiKey)
-  }
-  if (settings.notionPlanningDatabaseId !== undefined) {
-    await store.set('notion_planning_database_id', settings.notionPlanningDatabaseId)
-  }
-  if (settings.notionAnalysisDatabaseId !== undefined) {
-    await store.set('notion_analysis_database_id', settings.notionAnalysisDatabaseId)
-  }
-  if (settings.notionIdeaDatabaseId !== undefined) {
-    await store.set('notion_idea_database_id', settings.notionIdeaDatabaseId)
-  }
   if (settings.chatModel !== undefined) {
     await store.set('chat_model', settings.chatModel)
+  }
+  if (settings.anthropicApiKey !== undefined) {
+    await store.set('anthropic_api_key', settings.anthropicApiKey)
+  }
+  if (settings.claudeModel !== undefined) {
+    await store.set('claude_model', settings.claudeModel)
+  }
+  if (settings.quickNoteToken !== undefined) {
+    await store.set('quicknote_token', settings.quickNoteToken)
+  }
+  if (settings.quickNoteMcpUrl !== undefined) {
+    await store.set('quicknote_mcp_url', settings.quickNoteMcpUrl)
+  }
+  if (settings.quickNotePlanningDatabaseId !== undefined) {
+    await store.set('quicknote_planning_database_id', settings.quickNotePlanningDatabaseId)
+  }
+  if (settings.quickNoteAnalysisDatabaseId !== undefined) {
+    await store.set('quicknote_analysis_database_id', settings.quickNoteAnalysisDatabaseId)
+  }
+  if (settings.quickNoteIdeaDatabaseId !== undefined) {
+    await store.set('quicknote_idea_database_id', settings.quickNoteIdeaDatabaseId)
+  }
+  if (settings.quickNoteDatabaseTitles !== undefined) {
+    await store.set('quicknote_database_titles', settings.quickNoteDatabaseTitles)
   }
 
   await saveStore()
@@ -173,20 +191,32 @@ export async function saveSessions(sessions: ChatSession[]): Promise<void> {
   if (currentSettings.openRouterApiKey) {
     await store.set('openrouter_api_key', currentSettings.openRouterApiKey)
   }
-  if (currentSettings.notionApiKey) {
-    await store.set('notion_api_key', currentSettings.notionApiKey)
-  }
-  if (currentSettings.notionPlanningDatabaseId) {
-    await store.set('notion_planning_database_id', currentSettings.notionPlanningDatabaseId)
-  }
-  if (currentSettings.notionAnalysisDatabaseId) {
-    await store.set('notion_analysis_database_id', currentSettings.notionAnalysisDatabaseId)
-  }
-  if (currentSettings.notionIdeaDatabaseId) {
-    await store.set('notion_idea_database_id', currentSettings.notionIdeaDatabaseId)
-  }
   if (currentSettings.chatModel) {
     await store.set('chat_model', currentSettings.chatModel)
+  }
+  if (currentSettings.anthropicApiKey) {
+    await store.set('anthropic_api_key', currentSettings.anthropicApiKey)
+  }
+  if (currentSettings.claudeModel) {
+    await store.set('claude_model', currentSettings.claudeModel)
+  }
+  if (currentSettings.quickNoteToken) {
+    await store.set('quicknote_token', currentSettings.quickNoteToken)
+  }
+  if (currentSettings.quickNoteMcpUrl) {
+    await store.set('quicknote_mcp_url', currentSettings.quickNoteMcpUrl)
+  }
+  if (currentSettings.quickNotePlanningDatabaseId) {
+    await store.set('quicknote_planning_database_id', currentSettings.quickNotePlanningDatabaseId)
+  }
+  if (currentSettings.quickNoteAnalysisDatabaseId) {
+    await store.set('quicknote_analysis_database_id', currentSettings.quickNoteAnalysisDatabaseId)
+  }
+  if (currentSettings.quickNoteIdeaDatabaseId) {
+    await store.set('quicknote_idea_database_id', currentSettings.quickNoteIdeaDatabaseId)
+  }
+  if (currentSettings.quickNoteDatabaseTitles) {
+    await store.set('quicknote_database_titles', currentSettings.quickNoteDatabaseTitles)
   }
 
   await saveStore()

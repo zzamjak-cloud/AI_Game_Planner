@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send } from 'lucide-react'
 import { useAppStore, SessionType } from '../store/useAppStore'
-import { AnalysisResult } from './AnalysisResult'
 
 interface ChatPanelProps {
   onSendMessage: (message: string) => void
@@ -135,16 +134,6 @@ export function ChatPanel({ onSendMessage, currentAssistantMessage }: ChatPanelP
               </div>
             </div>
           </div>
-        )}
-
-        {/* 분석 결과 표시 (분석 모드 전용) */}
-        {isAnalysisMode && currentSession && (
-          <AnalysisResult
-            sessionId={currentSession.id}
-            gameName={currentSession.gameName}
-            notionPageUrl={currentSession.notionPageUrl}
-            analysisStatus={currentSession.analysisStatus}
-          />
         )}
 
         <div ref={messagesEndRef} />

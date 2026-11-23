@@ -9,7 +9,14 @@
 // 누적 문서를 대화 뒤에 append-only로 붙이므로 프롬프트 접두부가 안정되어 캐시 적중률이 높다.
 
 import { GeminiContent } from '../../types/gemini'
-import { RequestHooks, streamWithContinuation } from './openRouterService'
+import { ContinuationOptions, ContinuationResult, RequestHooks, streamWithContinuation } from './openRouterService'
+
+// 스트리밍 생성기 — 앱은 Claude/OpenRouter 디스패처를, MCP는 기본값(OpenRouter)을 쓴다
+export type StreamGenerator = (
+  apiKey: string,
+  contents: GeminiContent[],
+  options?: ContinuationOptions
+) => Promise<ContinuationResult>
 import { devLog } from '../utils/logger'
 
 // 분할이 의미 있으려면 최소 이 개수 이상의 섹션이 필요하다
@@ -148,6 +155,7 @@ export interface SectionedGenerationResult {
  * @param model 사용할 모델 슬러그
  * @param hooks 요청(섹션·이어쓰기 라운드)마다 부르는 usage 수신·중단 신호 생성기 (MCP 전용, 앱은 생략).
  *   예외를 던지면 남은 섹션을 보내지 않고 중단한다 (MCP 취소)
+ * @param stream 스트리밍 생성기 (기본: OpenRouter)
  * @returns 완성된 마크다운과 잘림 여부
  */
 export async function generateSectioned(
@@ -156,7 +164,8 @@ export async function generateSectioned(
   baseContents: GeminiContent[],
   callbacks: SectionedGenerationCallbacks,
   model?: string,
-  hooks?: () => RequestHooks
+  hooks?: () => RequestHooks,
+  stream: StreamGenerator = streamWithContinuation
 ): Promise<SectionedGenerationResult> {
   let document = ''
   let anyTruncated = false
@@ -183,7 +192,7 @@ export async function generateSectioned(
 
     let sectionText = ''
 
-    const result = await streamWithContinuation(apiKey, contents, {
+    const result = await stream(apiKey, contents, {
       model,
       hooks,
       onChunk: (chunk) => {

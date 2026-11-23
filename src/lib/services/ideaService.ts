@@ -1,7 +1,8 @@
 // 딸깍(게임 코어 아이디어) 생성 서비스
 
 import { GameIdea } from '../../types/idea'
-import { RequestHooks, openRouterService } from './openRouterService'
+import { GeminiContent } from '../../types/gemini'
+import { GenerateContentOptions, RequestHooks, openRouterService } from './openRouterService'
 import { ApiError } from '../../types/errors'
 import { IDEA_GENERATION_CONFIG } from '../constants/api'
 import { IDEA_SYSTEM_INSTRUCTION, IdeaSeed, buildIdeaUserPrompt, rollIdeaSeed } from '../ideaPrompt'
@@ -71,6 +72,8 @@ export interface IdeaGenerationOptions extends RequestHooks {
   focus?: string
   // 실제로 쓰인 seed 를 받는다 (형식 오류로 재시도하면 마지막 seed)
   onSeed?: (seed: IdeaSeed) => void
+  // 단발 생성기 — 앱은 Claude/OpenRouter 디스패처를, MCP는 기본값(OpenRouter)을 쓴다
+  generate?: (apiKey: string, contents: GeminiContent[], options?: GenerateContentOptions) => Promise<string>
 }
 
 /**
@@ -97,7 +100,8 @@ export async function generateGameIdea(
     devLog.log(`💡 딸깍 seed (${attempt + 1}/${MAX_FORMAT_RETRIES + 1}):`, seed.summary)
 
     try {
-      const text = await openRouterService.generateContent(
+      const generate = options?.generate ?? ((k, c, o) => openRouterService.generateContent(k, c, o))
+      const text = await generate(
         apiKey,
         [{ role: 'user', parts: [{ text: buildIdeaUserPrompt(seed, recentTitles, options?.focus) }] }],
         {

@@ -1,5 +1,6 @@
 import { Message, useAppStore } from '../store/useAppStore'
-import { streamWithContinuation } from '../lib/services/openRouterService'
+import { ClaudeRefusalError } from '../lib/services/anthropicService'
+import { hasLlmKey, isClaudeActive, streamWithContinuation } from '../lib/services/llmService'
 import {
   DEFAULT_ANALYSIS_PROMPT_FALLBACK,
   buildAnalysisContents,
@@ -7,7 +8,15 @@ import {
 } from '../lib/prompts/documentPrompt'
 import { removeCitationNumbers } from '../lib/utils/markdown'
 import { StreamingProgressTracker } from '../lib/utils/streamingProgress'
+import type { GeminiStreamChunk } from '../types/gemini'
 import { devLog } from '../lib/utils/logger'
+
+// Claude는 본문 앞에 진행 설명을 붙일 수 있어, 태그가 없으면 첫 헤딩/제목 주석 앞을 버린다
+function trimLeadingNarration(text: string): string {
+  if (text.includes('<markdown_content>')) return text
+  const start = text.search(/^(#{1,6}\s|<!--)/m)
+  return start > 0 ? text.slice(start) : text
+}
 
 interface AnalysisCallbacks {
   onChatUpdate: (text: string) => void
@@ -26,9 +35,11 @@ export function useGameAnalysis() {
     systemPrompt?: string  // 신규: 동적 시스템 프롬프트
   ) => {
     try {
-      // API Key 검증 및 정리
+      const useClaude = isClaudeActive()
+
+      // API Key 검증 및 정리 (Claude 키가 있으면 llmService가 그 키를 쓴다)
       const cleanApiKey = String(apiKey || '').trim()
-      if (!cleanApiKey) {
+      if (!hasLlmKey()) {
         throw new Error('API Key가 비어있습니다')
       }
 
@@ -54,16 +65,8 @@ export function useGameAnalysis() {
       const progressTracker = new StreamingProgressTracker(systemPrompt || DEFAULT_ANALYSIS_PROMPT_FALLBACK)
       devLog.log('📊 [분석] 진행 상황 추적 시작 - 헤더 개수:', progressTracker.getTotalCount())
 
-      // OpenRouter 서비스를 통한 스트리밍 호출 (웹 검색 포함, 사용자 선택 모델 적용)
       // 잘리면 자동으로 이어받아 재요청한다.
-      const { truncated: wasMaxTokens } = await streamWithContinuation(cleanApiKey, contents, {
-        model: useAppStore.getState().chatModel,
-        tools: [
-          {
-            google_search: {}
-          },
-        ],
-        onChunk: (chunk) => {
+      const onChunk = (chunk: GeminiStreamChunk) => {
           if (chunk.candidates && chunk.candidates[0]?.content?.parts) {
             const text = chunk.candidates[0].content.parts[0]?.text || ''
             if (text) {
@@ -72,7 +75,8 @@ export function useGameAnalysis() {
               // console.log('텍스트 수신:', text.substring(0, 50) + '...')
 
               // <markdown_content> 태그 파싱
-              const parts = fullResponse.split(/<markdown_content>|<\/markdown_content>/)
+              const source = useClaude ? trimLeadingNarration(fullResponse) : fullResponse
+              const parts = source.split(/<markdown_content>|<\/markdown_content>/)
 
               let chatText = ''
               let markdownContent = ''
@@ -81,7 +85,7 @@ export function useGameAnalysis() {
                 // markdown_content 태그가 없음
                 // 분석 모드에서는 모든 내용을 마크다운으로 처리 (대비책)
                 devLog.warn('⚠️ [분석] <markdown_content> 태그 없음 - 모든 내용을 마크다운으로 처리')
-                markdownContent = removeCitationNumbers(fullResponse)
+                markdownContent = removeCitationNumbers(source)
 
                 // 진행 상황 추적
                 const progressMessage = progressTracker.update(markdownContent)
@@ -117,8 +121,18 @@ export function useGameAnalysis() {
               }
             }
           }
-        },
+        }
+
+      const streamResult = await streamWithContinuation(cleanApiKey, contents, {
+        model: useAppStore.getState().chatModel,
+        tools: [{ google_search: {} }],
+        onChunk,
       })
+
+      const wasMaxTokens = streamResult.truncated
+      const stoppedReason = 'stoppedReason' in streamResult ? streamResult.stoppedReason : undefined
+
+      if (useClaude) fullResponse = trimLeadingNarration(fullResponse)
 
       // 최종 파싱 (태그가 없으면 전체를 분석 보고서로, 인용 번호 제거)
       const parsed = parseDocumentResponse(fullResponse, 'analysis')
@@ -137,9 +151,16 @@ export function useGameAnalysis() {
         chatText = chatText ? chatText + warningMessage : warningMessage
       }
 
+      if (stoppedReason === 'pause_limit') {
+        const pauseMessage = '\n\n⚠️ 웹 검색이 길어져 분석이 중간에 멈췄을 수 있습니다. "계속 작성해줘"라고 요청하세요.'
+        chatText = chatText ? chatText + pauseMessage : pauseMessage
+      }
+
       callbacks.onComplete(chatText)
     } catch (error) {
       console.error('OpenRouter API Error:', error)
+      // 응답 도중 거부되면 스트리밍으로 채운 미리보기를 이전 상태로 되돌린다
+      if (error instanceof ClaudeRefusalError) callbacks.onMarkdownUpdate(currentAnalysis ?? '')
       callbacks.onError(
         error instanceof Error ? error : new Error('알 수 없는 오류가 발생했습니다')
       )

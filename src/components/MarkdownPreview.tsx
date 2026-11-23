@@ -2,24 +2,23 @@ import { useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
-import { Copy, BookOpen, Check, Loader2, Download, History, CheckCircle2, FileText } from 'lucide-react'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { Copy, Check, Loader2, Download, History, CheckCircle2, FileText, StickyNote } from 'lucide-react'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { useAppStore, SessionType } from '../store/useAppStore'
-import { createNotionPage } from '../lib/notionBlocks'
+import { createQuickNotePage } from '../lib/services/quickNoteService'
 import { extractGameNameFromPlanning, extractGameNameFromAnalysis, removeHtmlComments } from '../lib/utils/markdown'
 import { VersionHistory } from './VersionHistory'
 import { ChecklistPanel } from './ChecklistPanel'
 import { ReferenceManager } from './ReferenceManager'
-import { devLog } from '../lib/utils/logger'
 
 export function MarkdownPreview() {
   const {
     currentSessionId,
-    notionApiKey,
-    notionPlanningDatabaseId,
-    notionAnalysisDatabaseId,
+    quickNoteToken,
+    quickNoteMcpUrl,
+    quickNotePlanningDatabaseId,
+    quickNoteAnalysisDatabaseId,
     activePreviewTab,
     setActivePreviewTab,
   } = useAppStore()
@@ -30,7 +29,7 @@ export function MarkdownPreview() {
   )
 
   const [isCopied, setIsCopied] = useState(false)
-  const [isNotionLoading, setIsNotionLoading] = useState(false)
+  const [isQuickNoteLoading, setIsQuickNoteLoading] = useState(false)
 
   const isAnalysisMode = currentSession?.type === SessionType.ANALYSIS
 
@@ -57,9 +56,6 @@ export function MarkdownPreview() {
       return `${gameName}_게임기획서.md`
     }
   }
-
-  // 현재 세션 타입에 맞는 Notion DB ID 선택
-  const notionDatabaseId = isAnalysisMode ? notionAnalysisDatabaseId : notionPlanningDatabaseId
 
   // 복사 기능
   const handleCopy = async () => {
@@ -103,49 +99,36 @@ export function MarkdownPreview() {
     }
   }
 
-  // 노션 저장 기능
-  const handleSaveToNotion = async () => {
+  // QuickNote 저장 기능
+  const handleSaveToQuickNote = async () => {
     if (!markdownContent) {
       alert('저장할 기획서가 없습니다')
       return
     }
 
-    if (!notionApiKey || !notionDatabaseId) {
-      alert('노션 API 설정이 필요합니다.\n\n설정 메뉴에서 Notion API Key와 Database ID를 입력해주세요.')
+    const databaseId = isAnalysisMode ? quickNoteAnalysisDatabaseId : quickNotePlanningDatabaseId
+    if (!quickNoteToken || !databaseId) {
+      alert('QuickNote 설정이 필요합니다.\n\n설정 메뉴에서 QuickNote 토큰과 데이터베이스를 입력해주세요.')
       return
     }
 
-    devLog.log('📝 노션 저장 시작:', { gameName, isAnalysisMode, length: markdownContent.length })
-
-    setIsNotionLoading(true)
+    setIsQuickNoteLoading(true)
 
     try {
-      const pageUrl = await createNotionPage(
-        gameName,
-        markdownContent,
-        notionApiKey,
-        notionDatabaseId,
-        isAnalysisMode
+      const title = `${gameName} : ${isAnalysisMode ? '게임 분석' : '게임 기획서'}`
+      await createQuickNotePage(
+        { token: quickNoteToken, url: quickNoteMcpUrl },
+        databaseId,
+        title,
+        removeHtmlComments(markdownContent)
       )
-
-      if (pageUrl) {
-        alert('노션에 저장되었습니다!\n\n' + pageUrl)
-        // 노션 페이지 열기
-        try {
-          await openUrl(pageUrl)
-        } catch (openError) {
-          console.error('페이지 열기 실패:', openError)
-          // 페이지 열기 실패는 무시 (수동으로 열 수 있음)
-        }
-      } else {
-        throw new Error('페이지 URL을 받지 못했습니다')
-      }
+      alert('QuickNote에 저장했습니다.')
     } catch (error) {
-      console.error('❌ 노션 저장 실패:', error)
+      console.error('❌ QuickNote 저장 실패:', error)
       const errorMessage = error instanceof Error ? error.message : String(error)
-      alert('노션 저장에 실패했습니다.\n\n' + errorMessage)
+      alert('QuickNote 저장에 실패했습니다.\n\n' + errorMessage)
     } finally {
-      setIsNotionLoading(false)
+      setIsQuickNoteLoading(false)
     }
   }
 
@@ -229,17 +212,17 @@ export function MarkdownPreview() {
               <Download className="w-4 h-4" />
             </button>
 
-            {/* 노션 저장 버튼 */}
+            {/* QuickNote 저장 버튼 */}
             <button
-              onClick={handleSaveToNotion}
-              disabled={isNotionLoading || !markdownContent}
+              onClick={handleSaveToQuickNote}
+              disabled={isQuickNoteLoading || !markdownContent}
               className="p-2 rounded-lg bg-background hover:bg-accent transition-colors relative group disabled:opacity-50 disabled:cursor-not-allowed"
-              title={!markdownContent ? "내용이 없습니다" : "노션에 저장"}
+              title={!markdownContent ? "내용이 없습니다" : "QuickNote에 저장"}
             >
-              {isNotionLoading ? (
+              {isQuickNoteLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <BookOpen className="w-4 h-4" />
+                <StickyNote className="w-4 h-4" />
               )}
             </button>
           </div>

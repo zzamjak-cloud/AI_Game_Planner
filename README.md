@@ -1,6 +1,6 @@
 # AI Game Planner
 
-AI 기반 모바일 게임 기획서 작성 및 게임 분석 데스크톱 애플리케이션 (v1.0.0)
+AI 기반 모바일 게임 기획서 작성 및 게임 분석 데스크톱 애플리케이션 (v1.1.0)
 
 로그인 없이 누구나 사용할 수 있습니다. 설정에서 본인의 [OpenRouter](https://openrouter.ai/) API Key만 입력하면 바로 동작합니다.
 
@@ -24,9 +24,9 @@ OpenRouter를 통한 Gemini AI와의 대화를 통해 개발자가 즉시 착수
 - 히트 게임·밈·쇼츠 트렌드 등 영감 소재와 심리 트리거, 비틀기 방식을 매 클릭 랜덤 조합해 다양성 확보
 - 즐겨찾기·히스토리·마크다운 복사 지원
 
-### 4. Notion 연동
-- 작성된 기획서/분석 보고서를 Notion 데이터베이스로 원클릭 내보내기
-- 기획용/분석용 Notion DB 별도 설정 가능
+### 4. QuickNote 연동
+- 작성된 기획서/분석 보고서/딸깍 아이디어를 QuickNote 데이터베이스로 원클릭 저장
+- 기획용/분석용/딸깍용 데이터베이스 별도 설정 가능
 
 ### 5. 문서 관리
 - **버전 관리**: 기획서 작성 시점별 버전 스냅샷 저장 및 이력 조회
@@ -59,7 +59,7 @@ OpenRouter를 통한 Gemini AI와의 대화를 통해 개발자가 즉시 착수
 | **AI** | OpenRouter API (Gemini Flash 모델, 스트리밍) |
 | **마크다운** | react-markdown, remark-gfm, rehype-raw |
 | **리치 텍스트 에디터** | TipTap |
-| **외부 연동** | Notion API |
+| **외부 연동** | QuickNote MCP |
 | **아이콘** | Lucide React |
 | **날짜 처리** | date-fns |
 | **Tauri 플러그인** | fs, dialog, http, store, updater, opener, deep-link, process |
@@ -121,8 +121,10 @@ npm run tauri build
 ```
 
 ### 필수 설정
-- **OpenRouter API Key**: 첫 실행 시 열리는 설정 모달에서 본인의 OpenRouter API 키 입력 (키는 로컬에만 저장됨)
-- **Notion 연동** (선택): Notion API 키 및 데이터베이스 ID 설정
+- **API Key (둘 중 하나 이상)**: 첫 실행 시 열리는 설정 모달에서 입력 (키는 로컬에만 저장됨)
+  - **Claude API Key**: 있으면 기획·분석·딸깍·번역 모두 Claude를 사용합니다 (분석은 웹 검색 포함). 모델은 헤더/설정에서 선택
+  - **OpenRouter API Key**: Claude 키가 없을 때만 사용합니다 (MCP 서버는 항상 OpenRouter)
+- **QuickNote 연동** (선택): QuickNote 토큰 및 데이터베이스 설정
 
 ---
 

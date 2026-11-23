@@ -335,7 +335,6 @@ export function Sidebar({ onStartAnalysis }: SidebarProps) {
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
         gameName: session.gameName,
-        notionPageUrl: session.notionPageUrl,
         analysisStatus: session.analysisStatus,
         templateId: session.templateId,
 
@@ -409,7 +408,6 @@ export function Sidebar({ onStartAnalysis }: SidebarProps) {
         createdAt: sessionData.createdAt || Date.now(),
         updatedAt: sessionData.updatedAt || Date.now(),
         gameName: sessionData.gameName,
-        notionPageUrl: sessionData.notionPageUrl,
         analysisStatus: sessionData.analysisStatus,
         templateId: sessionData.templateId,
 

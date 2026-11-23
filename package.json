@@ -1,7 +1,7 @@
 {
   "name": "ai-game-planner",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "GPL-3.0-only",
   "author": "zzamjak <zzamjak@gmail.com>",
   "type": "module",
@@ -16,6 +16,7 @@
     "mcp:typecheck": "tsc --noEmit -p mcp/tsconfig.json"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
     "@emoji-mart/data": "^1.2.1",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-deep-link": "^2",

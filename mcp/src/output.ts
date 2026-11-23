@@ -35,7 +35,7 @@ export function toGplan(session: InboxSessionPayload['session'] & { createdAt?: 
   )
 }
 
-/** 아이디어 → 마크다운 (앱 Notion 내보내기와 같은 구성) */
+/** 아이디어 → 마크다운 (앱 QuickNote 내보내기와 같은 구성) */
 export function ideaToMarkdown(idea: Pick<GameIdea, 'title' | 'lines' | 'hook' | 'inspiration'>, heading = '#'): string {
   const lines = [`${heading} ${idea.title}`, '', ...idea.lines.map((line, index) => `${index + 1}. ${line}`)]
   // 직접 넘긴 아이디어는 심리 훅·영감 소재가 없을 수 있다 — 빈 항목은 쓰지 않는다

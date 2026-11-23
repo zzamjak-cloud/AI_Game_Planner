@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useAppStore, SessionType } from '../store/useAppStore'
-import { getSettings, saveSettings, saveTemplates, removeLegacyCollectionData } from '../lib/store'
+import { getSettings, saveTemplates, removeLegacyCollectionData } from '../lib/store'
 import { DEFAULT_TEMPLATES, DEFAULT_PLANNING_TEMPLATE, DEFAULT_STORY_TEMPLATE, DEFAULT_ANALYSIS_TEMPLATE } from '../lib/templateDefaults'
 import { migrateSessions, migrateSettings } from '../lib/migrations'
 import { devLog } from '../lib/utils/logger'
@@ -17,11 +17,15 @@ interface UseAppInitializationOptions {
 export function useAppInitialization(options: UseAppInitializationOptions = {}) {
   const {
     setApiKey,
-    setNotionApiKey,
-    setNotionPlanningDatabaseId,
-    setNotionAnalysisDatabaseId,
-    setNotionIdeaDatabaseId,
     setChatModel,
+    setAnthropicApiKey,
+    setClaudeModel,
+    setQuickNoteToken,
+    setQuickNoteMcpUrl,
+    setQuickNotePlanningDatabaseId,
+    setQuickNoteAnalysisDatabaseId,
+    setQuickNoteIdeaDatabaseId,
+    setQuickNoteDatabaseTitles,
   } = useAppStore()
 
   useEffect(() => {
@@ -32,48 +36,29 @@ export function useAppInitialization(options: UseAppInitializationOptions = {}) 
         const settings = await getSettings()
 
         devLog.log('API 키 상태:', {
-          openRouter: settings.openRouterApiKey ? '존재' : '없음',
-          notion: settings.notionApiKey ? '존재' : '없음',
-          planningDb: settings.notionPlanningDatabaseId ? '존재' : '없음',
-          analysisDb: settings.notionAnalysisDatabaseId ? '존재' : '없음'
+          openRouter: settings.openRouterApiKey ? '존재' : '없음'
         })
 
         if (settings.openRouterApiKey) {
           setApiKey(settings.openRouterApiKey)
-        } else {
-          // API Key가 없으면 설정 모달 표시
+        } else if (!settings.anthropicApiKey) {
+          // OpenRouter·Claude 키가 모두 없으면 설정 모달 표시
           options.onSettingsRequired?.()
-        }
-
-        if (settings.notionApiKey) {
-          setNotionApiKey(settings.notionApiKey)
-        }
-
-        // Planning DB ID 로드 (기존 DB ID 마이그레이션 포함)
-        if (settings.notionPlanningDatabaseId) {
-          setNotionPlanningDatabaseId(settings.notionPlanningDatabaseId)
-        } else if (settings.oldNotionDbId) {
-          // 마이그레이션: 기존 notion_database_id를 planning DB로 사용
-          setNotionPlanningDatabaseId(settings.oldNotionDbId)
-          await saveSettings({
-            notionPlanningDatabaseId: settings.oldNotionDbId,
-          })
-        }
-
-        // Analysis DB ID 로드
-        if (settings.notionAnalysisDatabaseId) {
-          setNotionAnalysisDatabaseId(settings.notionAnalysisDatabaseId)
-        }
-
-        // 딸깍 아이디어 DB ID 로드
-        if (settings.notionIdeaDatabaseId) {
-          setNotionIdeaDatabaseId(settings.notionIdeaDatabaseId)
         }
 
         // 채팅 모델 로드 (없으면 슬라이스 기본값 유지)
         if (settings.chatModel) {
           setChatModel(settings.chatModel)
         }
+
+        if (settings.anthropicApiKey) setAnthropicApiKey(settings.anthropicApiKey)
+        setClaudeModel(settings.claudeModel)
+        if (settings.quickNoteToken) setQuickNoteToken(settings.quickNoteToken)
+        setQuickNoteMcpUrl(settings.quickNoteMcpUrl)
+        if (settings.quickNotePlanningDatabaseId) setQuickNotePlanningDatabaseId(settings.quickNotePlanningDatabaseId)
+        if (settings.quickNoteAnalysisDatabaseId) setQuickNoteAnalysisDatabaseId(settings.quickNoteAnalysisDatabaseId)
+        if (settings.quickNoteIdeaDatabaseId) setQuickNoteIdeaDatabaseId(settings.quickNoteIdeaDatabaseId)
+        setQuickNoteDatabaseTitles(settings.quickNoteDatabaseTitles)
 
         // 템플릿 로드 및 초기화
         devLog.log('📋 템플릿 로드')
